@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Gym Progress</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{background:#111827;color:#fff;padding:20px 18px 16px;position:sticky;top:0;z-index:3}h1{margin:0;font-size:25px}.sub{opacity:.7;font-size:13px;margin-top:3px}
+main{max-width:760px;margin:auto;padding:14px 14px 90px}.card{background:#fff;border-radius:16px;padding:16px;margin-bottom:13px;box-shadow:0 1px 4px #0001}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{background:#f9fafb;border-radius:13px;padding:13px}.num{font-size:22px;font-weight:750}.label,.muted{font-size:12px;color:#6b7280}
+button,input,select{font:inherit}button{border:0;border-radius:11px;padding:11px 13px;background:#111827;color:#fff;font-weight:650}button.secondary{background:#e5e7eb;color:#111827}button.danger{background:#fee2e2;color:#991b1b}
+input,select{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:10px;background:#fff}label{display:block;font-size:12px;color:#6b7280;margin:9px 0 4px}
+.row{display:flex;gap:8px;align-items:center}.between{justify-content:space-between}.exercise{border-top:1px solid #eee;padding-top:12px;margin-top:12px}.set{display:grid;grid-template-columns:28px 1fr 1fr 35px;gap:6px;margin:7px 0;align-items:center}.setno{text-align:center;color:#6b7280;font-size:12px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ddd;display:flex;justify-content:center;z-index:4}nav button{flex:1;max-width:190px;background:#fff;color:#6b7280;border-radius:0;padding:12px 3px;font-size:12px}nav button.active{color:#111827}
+.hidden{display:none}.previous{background:#f9fafb;border-radius:10px;padding:9px 10px;margin-top:8px;font-size:12px;color:#4b5563}.suggestion{margin-top:7px;font-size:13px;font-weight:650}.tag{font-size:11px;background:#e5e7eb;border-radius:99px;padding:4px 7px}.pr{font-weight:700}.history{border-top:1px solid #eee;padding:9px 0}
+canvas{width:100%;height:210px;background:#fafafa;border-radius:12px}
+</style>
+</head>
+<body>
+<header><h1>Gym Progress</h1><div class="sub">Training • progressie • lichaam</div></header>
+<main>
+<section id="dashboard">
+<div class="grid">
+<div class="stat"><div class="label">Gewicht</div><div class="num" id="dw">—</div></div>
+<div class="stat"><div class="label">Buikomvang</div><div class="num" id="db">—</div></div>
+</div>
+<div class="card" style="margin-top:13px"><div class="row between"><b>Laatste training</b><span class="tag" id="ld">—</span></div><div id="lw" class="muted" style="margin-top:9px">Nog geen training.</div></div>
+<div class="card"><b>Snelle actie</b><div class="row" style="margin-top:10px"><button id="quickTraining">+ Training</button><button class="secondary" id="quickBody">+ Meting</button></div></div>
+<div class="card"><b>Je records</b><div id="prs" class="muted" style="margin-top:8px">Nog geen records.</div></div>
+</section>
+
+<section id="training" class="hidden"><div class="card">
+<div class="row between"><b>Nieuwe training</b><button class="secondary" id="addExercise">+ Oefening</button></div>
+<label>Naam</label><input id="wn" placeholder="Push / Pull / Legs / Full body">
+<div id="exercises"></div>
+<div class="row" style="margin-top:15px"><button id="saveWorkout">Opslaan</button><button class="secondary" id="cancelWorkout">Annuleren</button></div>
+</div></section>
+
+<section id="progress" class="hidden">
+<div class="card"><b>Progressie</b><select id="exerciseSelect" style="margin-top:9px"></select></div>
+<div class="card"><canvas id="chart" width="700" height="300"></canvas><div id="progressText" class="muted" style="margin-top:9px"></div></div>
+<div class="card"><b>Sets</b><div id="progressHistory" class="muted" style="margin-top:7px"></div></div>
+</section>
+
+<section id="body" class="hidden">
+<div class="card"><b>Nieuwe meting</b><div class="grid">
+<div><label>Gewicht (kg)</label><input id="bodyWeight" type="number" min="0" step=".1"></div>
+<div><label>Buikomvang (cm)</label><input id="waist" type="number" min="0" step=".5"></div>
+</div><button style="margin-top:11px" id="saveBody">Opslaan</button></div>
+<div class="card"><b>Geschiedenis</b><div id="bodyHistory" class="muted" style="margin-top:8px"></div></div>
+</section>
+</main>
+
+<nav>
+<button id="nav-dashboard" class="active">🏠<br>Overzicht</button>
+<button id="nav-training">🏋️<br>Training</button>
+<button id="nav-progress">📈<br>Progressie</button>
+<button id="nav-body">⚖️<br>Lichaam</button>
+</nav>
+
+<script>
+(function(){
+"use strict";
+const STORAGE_KEY="gymProgress_v3";
+let data;
+try{data=JSON.parse(localStorage.getItem(STORAGE_KEY)||"null")}catch(e){data=null}
+if(!data||typeof data!=="object")data={workouts:[],body:[]};
+if(!Array.isArray(data.workouts))data.workouts=[];
+if(!Array.isArray(data.body))data.body=[];
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
+const persist=()=>localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
+
+function show(id){
+ ["dashboard","training","progress","body"].forEach(x=>$(x).classList.toggle("hidden",x!==id));
+ document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+ $("nav-"+id).classList.add("active");
+ if(id==="dashboard")renderDashboard();
+ if(id==="progress"){populateExercises();drawProgress()}
+ if(id==="body")renderBody();
+}
+
+function formatSet(e,s){
+ if(e.type==="time")return s.reps+" sec";
+ return (s.weight===0?"BW":s.weight+" kg")+" × "+s.reps;
+}
+
+function renderDashboard(){
+ const b=data.body[data.body.length-1],w=data.workouts[data.workouts.length-1];
+ $("dw").textContent=b&&b.weight!==null?b.weight+" kg":"—";
+ $("db").textContent=b&&b.waist!==null?b.waist+" cm":"—";
+ $("ld").textContent=w?new Date(w.date).toLocaleDateString("nl-NL"):"—";
+ $("lw").innerHTML=w?"<b>"+esc(w.name)+"</b><br>"+w.exercises.map(e=>esc(e.name)+": "+e.sets.map(s=>formatSet(e,s)).join(", ")).join("<br>"):"Nog geen training.";
+ const best={};
+ data.workouts.forEach(w=>w.exercises.forEach(e=>e.sets.forEach(s=>{
+   if(e.type==="time"){
+     if(!best[e.name]||s.reps>best[e.name].value)best[e.name]={type:"time",value:s.reps};
+   }else{
+     const one=(s.weight||0)*(1+s.reps/30);
+     if(!best[e.name]||one>best[e.name].value)best[e.name]={type:"reps",value:one};
+   }
+ })));
+ $("prs").innerHTML=Object.keys(best).length?
+ Object.entries(best).map(([n,v])=>esc(n)+" — <span class='pr'>"+(v.type==="time"?v.value+" sec":v.value.toFixed(1)+" kg 1RM")+"</span>").join("<br>"):"Nog geen records.";
+}
+
+function addExercise(){
+ const box=document.createElement("div");
+ box.className="exercise";
+ box.innerHTML=
+ '<div class="row"><input class="exerciseName" placeholder="Oefening"><button type="button" class="danger removeExercise">×</button></div>'+
+ '<div class="previous"></div>'+
+ '<label>Type</label><select class="exerciseType"><option value="reps">Reps</option><option value="time">Tijd (seconden)</option></select>'+
+ '<label>Belasting</label><select class="loadType"><option value="weight">Gewicht</option><option value="bodyweight">Lichaamsgewicht</option></select>'+
+ '<div class="sets"></div><button type="button" class="secondary addSet">+ Set</button>';
+ $("exercises").appendChild(box);
+ box.querySelector(".removeExercise").onclick=()=>box.remove();
+ box.querySelector(".addSet").onclick=()=>addSet(box);
+ box.querySelector(".exerciseType").onchange=()=>{updateInputs(box);updatePrevious(box)};
+ box.querySelector(".loadType").onchange=()=>{updateInputs(box);updatePrevious(box)};
+ box.querySelector(".exerciseName").oninput=()=>updatePrevious(box);
+ addSet(box);addSet(box);
+}
+
+function getPreviousExercise(name){
+ if(!name)return null;
+ for(let i=data.workouts.length-1;i>=0;i--){
+   const found=data.workouts[i].exercises.find(e=>e.name.toLowerCase()===name.toLowerCase());
+   if(found)return {exercise:found,workout:data.workouts[i]};
+ }
+ return null;
+}
+
+function suggestionFor(ex){
+ const prev=getPreviousExercise(ex.name);
+ if(!prev)return "";
+ const e=prev.exercise;
+ if(e.type==="time"){
+   const best=Math.max(...e.sets.map(s=>s.reps));
+   return "Voorstel: "+Math.round(best+5)+" sec";
+ }
+ const working=e.sets.filter(s=>s.reps>0);
+ if(!working.length)return "";
+ const best=working.reduce((a,b)=>((b.weight*1+b.reps/100)>(a.weight*1+a.reps/100)?b:a),working[0]);
+ let suggested=best.weight;
+ if(best.reps>=10)suggested+=2.5;
+ else if(best.reps>=8)suggested+=2.5;
+ else suggested+=1.25;
+ if(e.load==="bodyweight")return "Voorstel: BW × "+(best.reps+1);
+ return "Voorstel: "+suggested+" kg × "+best.reps;
+}
+
+function updatePrevious(box){
+ const name=box.querySelector(".exerciseName").value.trim();
+ const prev=box.querySelector(".previous");
+ const found=getPreviousExercise(name);
+ if(!found){prev.textContent="Nog geen vorige training voor deze oefening.";return;}
+ const e=found.exercise;
+ const date=new Date(found.workout.date).toLocaleDateString("nl-NL");
+ const sets=e.sets.map(s=>formatSet(e,s)).join(", ");
+ prev.innerHTML="<b>Vorige keer ("+date+"):</b> "+esc(sets)+"<div class='suggestion'>"+esc(suggestionFor({name,type:e.type,load:e.load}))+"</div>";
+}
+function addSet(box){
+ const sets=box.querySelector(".sets"),row=document.createElement("div");
+ row.className="set";
+ row.innerHTML='<div class="setno">'+(sets.children.length+1)+'</div>'+
+ '<input class="weightInput" type="number" min="0" step=".5" placeholder="kg">'+
+ '<input class="repsInput" type="number" min="1" step="1" placeholder="reps">'+
+ '<button type="button" class="danger removeSet">×</button>';
+ sets.appendChild(row);
+ row.querySelector(".removeSet").onclick=()=>{row.remove();renumber(box)};
+ updateInputs(box);
+}
+
+function renumber(box){box.querySelectorAll(".setno").forEach((n,i)=>n.textContent=i+1)}
+
+function updateInputs(box){
+ const type=box.querySelector(".exerciseType").value,load=box.querySelector(".loadType").value;
+ box.querySelectorAll(".repsInput").forEach(i=>i.placeholder=type==="time"?"sec":"reps");
+ box.querySelectorAll(".weightInput").forEach(i=>{
+   if(load==="bodyweight"){i.disabled=true;i.value="0";i.placeholder="BW"}
+   else{i.disabled=false;i.placeholder="kg"}
+ });
+}
+
+function resetWorkout(){$("exercises").innerHTML="";$("wn").value=""}
+
+function saveWorkout(){
+ const exercises=[...document.querySelectorAll(".exercise")].map(box=>{
+   const type=box.querySelector(".exerciseType").value,load=box.querySelector(".loadType").value;
+   const sets=[...box.querySelectorAll(".set")].map(row=>{
+     const reps=Number(row.querySelector(".repsInput").value);
+     const weight=load==="bodyweight"?0:Number(row.querySelector(".weightInput").value);
+     return {weight,reps};
+   }).filter(s=>Number.isFinite(s.reps)&&s.reps>0&&Number.isFinite(s.weight)&&s.weight>=0);
+   return {name:box.querySelector(".exerciseName").value.trim(),type,load,sets};
+ }).filter(e=>e.name&&e.sets.length);
+ if(!exercises.length){alert("Voeg minstens één oefening met een geldige set toe.");return}
+ data.workouts.push({date:new Date().toISOString(),name:$("wn").value.trim()||"Training",exercises});
+ persist();resetWorkout();show("dashboard");
+}
+
+function saveBody(){
+ const weight=$("bodyWeight").value===""?null:Number($("bodyWeight").value);
+ const waist=$("waist").value===""?null:Number($("waist").value);
+ if(weight===null&&waist===null){alert("Vul minimaal één meting in.");return}
+ const last=data.body[data.body.length-1]||{};
+ data.body.push({date:new Date().toISOString(),weight:weight!==null?weight:(last.weight??null),waist:waist!==null?waist:(last.waist??null)});
+ persist();$("bodyWeight").value="";$("waist").value="";renderBody();renderDashboard();
+}
+
+function renderBody(){
+ $("bodyHistory").innerHTML=data.body.length?[...data.body].reverse().map(x=>'<div class="history">'+new Date(x.date).toLocaleDateString("nl-NL")+" — "+(x.weight??"—")+" kg — "+(x.waist??"—")+" cm</div>").join(""):"Nog geen metingen.";
+}
+
+function populateExercises(){
+ const names=[...new Set(data.workouts.flatMap(w=>w.exercises.map(e=>e.name)))];
+ $("exerciseSelect").innerHTML=names.length?names.map(n=>"<option value='"+esc(n)+"'>"+esc(n)+"</option>").join(""):"<option value=''>Geen oefeningen</option>";
+}
+
+function drawProgress(){
+ const name=$("exerciseSelect").value,points=[];let type="reps";
+ data.workouts.forEach(w=>w.exercises.forEach(e=>{
+   if(e.name===name){
+     type=e.type||"reps";
+     e.sets.forEach(s=>points.push({value:type==="time"?s.reps:(s.weight||0)*(1+s.reps/30),date:new Date(w.date),weight:s.weight,reps:s.reps}));
+   }
+ }));
+ const c=$("chart"),ctx=c.getContext("2d");ctx.clearRect(0,0,c.width,c.height);
+ if(!points.length){$("progressText").textContent="Nog geen data.";$("progressHistory").textContent="";return}
+ const min=Math.min(...points.map(p=>p.value)),max=Math.max(...points.map(p=>p.value));
+ ctx.beginPath();
+ points.forEach((p,i)=>{const x=40+i*(c.width-80)/Math.max(1,points.length-1),y=c.height-45-(p.value-min)/Math.max(1,max-min)*(c.height-90);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+ ctx.stroke();
+ const best=Math.max(...points.map(p=>p.value));
+ $("progressText").textContent=type==="time"?"Beste tijd: "+best+" sec • "+points.length+" sets":"Beste geschatte 1RM: "+best.toFixed(1)+" kg • "+points.length+" sets";
+ $("progressHistory").innerHTML=[...points].reverse().slice(0,20).map(p=>type==="time"?p.date.toLocaleDateString("nl-NL")+" — "+p.reps+" sec":p.date.toLocaleDateString("nl-NL")+" — "+(p.weight===0?"BW":p.weight+" kg")+" × "+p.reps).join("<br>");
+}
+
+$("quickTraining").onclick=()=>show("training");
+$("quickBody").onclick=()=>show("body");
+$("addExercise").onclick=addExercise;
+$("saveWorkout").onclick=saveWorkout;
+$("cancelWorkout").onclick=()=>{resetWorkout();show("dashboard")};
+$("saveBody").onclick=saveBody;
+$("exerciseSelect").onchange=drawProgress;
+$("nav-dashboard").onclick=()=>show("dashboard");
+$("nav-training").onclick=()=>show("training");
+$("nav-progress").onclick=()=>show("progress");
+$("nav-body").onclick=()=>show("body");
+
+renderDashboard();
+})();
+</script>
+</body>
+</html>
