@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="nl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827"><meta name="apple-mobile-web-app-capable" content="yes">
+<title>Gym Progress</title><link rel="manifest" href="manifest.json">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{background:#111827;color:#fff;padding:20px 18px 16px;position:sticky;top:0;z-index:3}h1{margin:0;font-size:25px}.sub{opacity:.7;font-size:13px;margin-top:3px}
+main{max-width:760px;margin:auto;padding:14px 14px 90px}.card{background:#fff;border-radius:16px;padding:16px;margin-bottom:13px;box-shadow:0 1px 4px #0001}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{background:#f9fafb;border-radius:13px;padding:13px}.num{font-size:22px;font-weight:750}.label,.muted{font-size:12px;color:#6b7280}
+button,input,select{font:inherit}button{border:0;border-radius:11px;padding:11px 13px;background:#111827;color:#fff;font-weight:650}button.secondary{background:#e5e7eb;color:#111827}button.danger{background:#fee2e2;color:#991b1b}
+input,select{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:10px;background:#fff}label{display:block;font-size:12px;color:#6b7280;margin:9px 0 4px}
+.row{display:flex;gap:8px;align-items:center}.between{justify-content:space-between}.exercise{border-top:1px solid #eee;padding-top:12px;margin-top:12px}.set{display:grid;grid-template-columns:28px 1fr 1fr 35px;gap:6px;margin:7px 0;align-items:center}.setno{text-align:center;color:#6b7280;font-size:12px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ddd;display:flex;justify-content:center;z-index:4}nav button{flex:1;max-width:190px;background:#fff;color:#6b7280;border-radius:0;padding:12px 3px;font-size:12px}nav button.active{color:#111827}
+.hidden{display:none}.tag{font-size:11px;background:#e5e7eb;border-radius:99px;padding:4px 7px}.history{border-top:1px solid #eee;padding:9px 0}.pr{font-weight:700}
+canvas{width:100%;height:210px;background:#fafafa;border-radius:12px}
+</style></head><body>
+<header><h1>Gym Progress</h1><div class="sub">Training • progressie • lichaam</div></header>
+<main>
+<section id="dashboard">
+<div class="grid"><div class="stat"><div class="label">Gewicht</div><div class="num" id="dw">—</div></div><div class="stat"><div class="label">Buikomvang</div><div class="num" id="db">—</div></div></div>
+<div class="card" style="margin-top:13px"><div class="row between"><b>Laatste training</b><span class="tag" id="ld">—</span></div><div id="lw" class="muted" style="margin-top:9px">Nog geen training.</div></div>
+<div class="card"><b>Snelle actie</b><div class="row" style="margin-top:10px"><button onclick="show('training')">+ Training</button><button class="secondary" onclick="show('body')">+ Meting</button></div></div>
+<div class="card"><b>Je records</b><div id="prs" class="muted" style="margin-top:8px">Nog geen records.</div></div>
+</section>
+
+<section id="training" class="hidden"><div class="card">
+<div class="row between"><b>Nieuwe training</b><button class="secondary" onclick="addExercise()">+ Oefening</button></div>
+<label>Naam</label><input id="wn" placeholder="Push / Pull / Legs / Full body">
+<div id="ex"></div><div class="row" style="margin-top:15px"><button onclick="saveWorkout()">Opslaan</button><button class="secondary" onclick="resetWorkout()">Annuleren</button></div>
+</div></section>
+
+<section id="progress" class="hidden"><div class="card"><b>Progressie</b><select id="sel" style="margin-top:9px" onchange="draw()"></select></div>
+<div class="card"><canvas id="chart" width="700" height="300"></canvas><div id="pt" class="muted" style="margin-top:9px"></div></div>
+<div class="card"><b>Trainingen</b><div id="ph" class="muted" style="margin-top:7px"></div></div></section>
+
+<section id="body" class="hidden"><div class="card"><b>Nieuwe meting</b><div class="grid">
+<div><label>Gewicht (kg)</label><input id="bw" type="number" step=".1"></div><div><label>Buikomvang (cm)</label><input id="wa" type="number" step=".5"></div>
+</div><button style="margin-top:11px" onclick="saveBody()">Opslaan</button></div>
+<div class="card"><b>Geschiedenis</b><div id="bh" class="muted" style="margin-top:8px"></div></div></section>
+</main>
+<nav><button id="n-dashboard" class="active" onclick="show('dashboard')">🏠<br>Overzicht</button><button id="n-training" onclick="show('training')">🏋️<br>Training</button><button id="n-progress" onclick="show('progress')">📈<br>Progressie</button><button id="n-body" onclick="show('body')">⚖️<br>Lichaam</button></nav>
+<script>
+const K="gymProgress_v2";let d=JSON.parse(localStorage.getItem(K)||'{"workouts":[],"body":[]}');
+const save=()=>localStorage.setItem(K,JSON.stringify(d)), esc=s=>String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
+function show(id){["dashboard","training","progress","body"].forEach(x=>document.getElementById(x).classList.toggle("hidden",x!==id));document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));document.getElementById("n-"+id).classList.add("active");if(id=="dashboard")dash();if(id=="progress"){populate();draw()}if(id=="body")body();}
+function dash(){let b=d.body.at(-1),w=d.workouts.at(-1);dw.textContent=b?.weight?b.weight+" kg":"—";db.textContent=b?.waist?b.waist+" cm":"—";ld.textContent=w?new Date(w.date).toLocaleDateString("nl-NL"):"—";lw.innerHTML=w?`<b>${esc(w.name)}</b><br>`+w.exercises.map(e=>esc(e.name)+": "+e.sets.map(s=>s.weight+" × "+s.reps).join(", ")).join("<br>"):"Nog geen training.";let best={};d.workouts.flatMap(w=>w.exercises).forEach(e=>e.sets.forEach(s=>{let one=s.weight*(1+s.reps/30);if(!best[e.name]||one>best[e.name])best[e.name]=one}));prs.innerHTML=Object.keys(best).length?Object.entries(best).map(([n,v])=>`${esc(n)} — <span class="pr">${v.toFixed(1)} kg 1RM</span>`).join("<br>"):"Nog geen records."}
+function addExercise(){let w=document.createElement("div");w.className="exercise";w.innerHTML=`<div class=row><input class=en placeholder="Oefening"><button class=danger onclick="this.closest('.exercise').remove()">×</button></div><div class=sets></div><button class=secondary onclick="addSet(this)">+ Set</button>`;ex.appendChild(w);addSet(w.querySelector(".sets"));addSet(w.querySelector(".sets"))}
+function addSet(x){let s=x.classList.contains("sets")?x:x.previousElementSibling,n=s.children.length+1,z=document.createElement("div");z.className="set";z.innerHTML=`<div class=setno>${n}</div><input class=kg type=number step=.5 placeholder=kg><input class=rp type=number placeholder=reps><button class=danger onclick="this.parentElement.remove()">×</button>`;s.appendChild(z)}
+function resetWorkout(){ex.innerHTML="";wn.value="";}function saveWorkout(){let es=[...document.querySelectorAll(".exercise")].map(x=>({name:x.querySelector(".en").value.trim(),sets:[...x.querySelectorAll(".set")].map(s=>({weight:+s.querySelector(".kg").value,reps:+s.querySelector(".rp").value})).filter(s=>s.weight>0&&s.reps>0)})).filter(x=>x.name&&x.sets.length);if(!es.length)return alert("Voeg minstens één oefening met een geldige set toe.");d.workouts.push({date:new Date().toISOString(),name:wn.value.trim()||"Training",exercises:es});save();resetWorkout();dash();show("dashboard")}
+function saveBody(){let w=+bw.value,waist=+wa.value,last=d.body.at(-1)||{};if(!w&&!waist)return alert("Vul minimaal één meting in.");d.body.push({date:new Date().toISOString(),weight:w||last.weight||null,waist:waist||last.waist||null});save();bw.value="";wa.value="";body();dash()}
+function body(){bh.innerHTML=d.body.length?[...d.body].reverse().map(x=>`<div class=history>${new Date(x.date).toLocaleDateString("nl-NL")} — ${x.weight??"—"} kg — ${x.waist??"—"} cm</div>`).join(""):"Nog geen metingen."}
+function populate(){let names=[...new Set(d.workouts.flatMap(w=>w.exercises.map(e=>e.name)))];sel.innerHTML=names.length?names.map(x=>`<option>${esc(x)}</option>`).join(""):"<option>Geen oefeningen</option>"}
+function draw(){let name=sel.value,pts=[];d.workouts.forEach(w=>w.exercises.forEach(e=>{if(e.name==name)e.sets.forEach(s=>{if(s.weight&&s.reps)pts.push({est:s.weight*(1+s.reps/30),date:new Date(w.date),weight:s.weight,reps:s.reps})})}));let c=chart,ctx=c.getContext("2d");ctx.clearRect(0,0,c.width,c.height);if(!pts.length){pt.textContent="Nog geen data.";ph.textContent="";return}let min=Math.min(...pts.map(x=>x.est)),max=Math.max(...pts.map(x=>x.est));ctx.beginPath();pts.forEach((p,i)=>{let x=40+i*(c.width-80)/Math.max(1,pts.length-1),y=c.height-45-(p.est-min)/Math.max(1,max-min)*(c.height-90);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();pt.textContent=`Beste geschatte 1RM: ${Math.max(...pts.map(x=>x.est)).toFixed(1)} kg • ${pts.length} sets`;ph.innerHTML=[...pts].reverse().slice(0,12).map(p=>`${p.date.toLocaleDateString("nl-NL")} — ${p.weight} kg × ${p.reps}`).join("<br>")}
+dash();resetWorkout();
+</script></body></html>
